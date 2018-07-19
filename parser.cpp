@@ -4,6 +4,7 @@ namespace marked {
     
     Parser::Parser()
     {
+        m_block_level = 0;
         m_lexer = new Lexer;
     }
     
@@ -14,9 +15,8 @@ namespace marked {
     
     // TokenType是按bit对比的
     // 方便处理多个参数的情况
-    bool Parser::match(int type)
+    bool Parser::match_and_consume(int type)
     {
-        
         if (m_lexer->peek() == type)
         {
             m_lexer->consume();
@@ -26,17 +26,17 @@ namespace marked {
         return false;
     }
     
-    bool Parser::parse_block_until(AstNode *block, int until, bool top)
+    bool Parser::parse_block_until(AstNode *block, int until)
     {
+        m_block_level++;
+        
+        bool top = m_block_level == 1;
         bool match = false;
         
         while (!m_lexer->empty() && m_lexer->peek() != until)
         {
-            if (m_lexer->peek() == TT_NEWLINE)
-            {
-                m_lexer->consume();
+            if (match_and_consume(TT_NEWLINE))
                 continue;
-            }
             
             AstNode *node = new AstNode();
             
@@ -100,6 +100,8 @@ namespace marked {
                 break;
             }
         }
+        
+        m_block_level--;
         
         return match;
     }
@@ -201,8 +203,8 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (parse_block_until(body, TT_EOS, true) &&
-            match(TT_EOS))
+        if (parse_block_until(body, TT_EOS) &&
+            match_and_consume(TT_EOS))
         {
             m_lexer->commit();
             return true;
@@ -216,8 +218,8 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_MULTI_DASH | TT_MULTI_EQUAL) &&
-            match(TT_NEWLINE))
+        if (match_and_consume(TT_MULTI_DASH | TT_MULTI_EQUAL) &&
+            match_and_consume(TT_NEWLINE))
         {
             m_lexer->commit();
             return true;
@@ -231,10 +233,10 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_POUND) &&
-            match(TT_WHITESPACE) &&
+        if (match_and_consume(TT_POUND) &&
+            match_and_consume(TT_WHITESPACE) &&
             parse_span_until(heading, TT_NEWLINE) &&
-            match(TT_NEWLINE))
+            match_and_consume(TT_NEWLINE))
         {
             m_lexer->commit();
             return true;
@@ -248,8 +250,8 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_ARROW) &&
-            match(TT_WHITESPACE) &&
+        if (match_and_consume(TT_ARROW) &&
+            match_and_consume(TT_WHITESPACE) &&
             parse_block_until(blockqoute, TT_ARROW | TT_NEWLINE))
         {
             m_lexer->commit();
@@ -288,11 +290,11 @@ namespace marked {
         m_lexer->save();
         
         // ignore，之后需要补充计算
-        match(TT_WHITESPACE | TT_MULTI_WHITESPACE);
+        match_and_consume(TT_WHITESPACE | TT_MULTI_WHITESPACE);
         
-        if (match(TT_NUMBER) &&
-            match(TT_DOT) &&
-            match(TT_WHITESPACE) &&
+        if (match_and_consume(TT_NUMBER) &&
+            match_and_consume(TT_DOT) &&
+            match_and_consume(TT_WHITESPACE) &&
             parse_block_until(listitem, TT_NUMBER | TT_NEWLINE))
         {
             m_lexer->commit();
@@ -331,10 +333,10 @@ namespace marked {
         m_lexer->save();
         
         // ignore，之后需要补充计算
-        match(TT_WHITESPACE | TT_MULTI_WHITESPACE);
+        match_and_consume(TT_WHITESPACE | TT_MULTI_WHITESPACE);
         
-        if (match(TT_PLUS | TT_STAR | TT_DASH) &&
-            match(TT_WHITESPACE) &&
+        if (match_and_consume(TT_PLUS | TT_STAR | TT_DASH) &&
+            match_and_consume(TT_WHITESPACE) &&
             parse_block_until(listitem, TT_PLUS | TT_STAR | TT_DASH | TT_NEWLINE))
         {
             m_lexer->commit();
@@ -349,10 +351,10 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_TRIPLE_QOUTE) &&
+        if (match_and_consume(TT_TRIPLE_QOUTE) &&
             merge_code_block(code_block) &&
-            match(TT_TRIPLE_QOUTE) &&
-            match(TT_NEWLINE))
+            match_and_consume(TT_TRIPLE_QOUTE) &&
+            match_and_consume(TT_NEWLINE))
         {
             m_lexer->commit();
             return true;
@@ -367,9 +369,9 @@ namespace marked {
         m_lexer->save();
         
         if (parse_span_until(heading, TT_NEWLINE) &&
-            match(TT_NEWLINE) &&
-            match(TT_MULTI_EQUAL | TT_MULTI_DASH) &&
-            match(TT_NEWLINE))
+            match_and_consume(TT_NEWLINE) &&
+            match_and_consume(TT_MULTI_EQUAL | TT_MULTI_DASH) &&
+            match_and_consume(TT_NEWLINE))
         {
             m_lexer->commit();
             return true;
@@ -385,7 +387,7 @@ namespace marked {
         m_lexer->save();
         
         if (parse_sentence(node) &&
-            match(TT_NEWLINE))
+            match_and_consume(TT_NEWLINE))
         {
             m_lexer->commit();
             paragraph->append(node);
@@ -436,7 +438,7 @@ namespace marked {
         m_lexer->save();
         
         if (parse_span_until(line, TT_NEWLINE) &&
-            match(TT_NEWLINE))
+            match_and_consume(TT_NEWLINE))
         {
             m_lexer->commit();
             return true;
@@ -450,13 +452,13 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_EXCLAMATION) &&
-            match(TT_LEFT_SQUARE) &&
+        if (match_and_consume(TT_EXCLAMATION) &&
+            match_and_consume(TT_LEFT_SQUARE) &&
             merge_text(image) &&
-            match(TT_RIGHT_SQUARE) &&
-            match(TT_LEFT_PARENT) &&
+            match_and_consume(TT_RIGHT_SQUARE) &&
+            match_and_consume(TT_LEFT_PARENT) &&
             merge_link(image) &&
-            match(TT_RIGHT_PARENT))
+            match_and_consume(TT_RIGHT_PARENT))
         {
             m_lexer->commit();
             return true;
@@ -473,12 +475,12 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_LEFT_SQUARE) &&
+        if (match_and_consume(TT_LEFT_SQUARE) &&
             merge_text(link) &&
-            match(TT_RIGHT_SQUARE) &&
-            match(TT_LEFT_PARENT) &&
+            match_and_consume(TT_RIGHT_SQUARE) &&
+            match_and_consume(TT_LEFT_PARENT) &&
             merge_link(link) &&
-            match(TT_RIGHT_PARENT))
+            match_and_consume(TT_RIGHT_PARENT))
         {
             m_lexer->commit();
             return true;
@@ -495,9 +497,9 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_QOUTE) &&
+        if (match_and_consume(TT_QOUTE) &&
             merge_code(code) &&
-            match(TT_QOUTE))
+            match_and_consume(TT_QOUTE))
         {
             m_lexer->commit();
             return true;
@@ -520,11 +522,11 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_UNDERSCORE) &&
-            match(TT_UNDERSCORE) &&
+        if (match_and_consume(TT_UNDERSCORE) &&
+            match_and_consume(TT_UNDERSCORE) &&
             parse_span_until(bold, TT_UNDERSCORE) &&
-            match(TT_UNDERSCORE) &&
-            match(TT_UNDERSCORE))
+            match_and_consume(TT_UNDERSCORE) &&
+            match_and_consume(TT_UNDERSCORE))
         {
             m_lexer->commit();
             return true;
@@ -538,11 +540,11 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_STAR) &&
-            match(TT_STAR) &&
+        if (match_and_consume(TT_STAR) &&
+            match_and_consume(TT_STAR) &&
             parse_span_until(bold, TT_STAR) &&
-            match(TT_STAR) &&
-            match(TT_STAR))
+            match_and_consume(TT_STAR) &&
+            match_and_consume(TT_STAR))
         {
             m_lexer->commit();
             return true;
@@ -565,9 +567,9 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_UNDERSCORE) &&
+        if (match_and_consume(TT_UNDERSCORE) &&
             parse_span_until(emphasis, TT_UNDERSCORE) &&
-            match(TT_UNDERSCORE))
+            match_and_consume(TT_UNDERSCORE))
         {
             m_lexer->commit();
             return true;
@@ -581,9 +583,9 @@ namespace marked {
     {
         m_lexer->save();
         
-        if (match(TT_STAR) &&
+        if (match_and_consume(TT_STAR) &&
             parse_span_until(emphasis, TT_STAR) &&
-            match(TT_STAR))
+            match_and_consume(TT_STAR))
         {
             m_lexer->commit();
             return true;

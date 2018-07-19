@@ -17,11 +17,12 @@ namespace marked {
         ~Parser();
         void parse(const string& input);
     private:
+        int m_block_level;
         Lexer *m_lexer;
         
-        bool match(int type);
+        bool match_and_consume(int type);
         
-        bool parse_block_until(AstNode *block, int until, bool top = false);
+        bool parse_block_until(AstNode *block, int until);
         bool parse_span_until(AstNode *span, int until);
         bool merge_until(string& value, int until);
         
